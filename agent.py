@@ -83,7 +83,7 @@ class GaiaAgent:
         self.web_search = web_search or WebSearchTool()
         self.attachment_tool = attachment_tool or AttachmentTool()
         self.web_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() == "true"
-        self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "8"))
+        self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "4"))
 
     def run(
         self,
