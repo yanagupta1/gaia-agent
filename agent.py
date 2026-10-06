@@ -2,6 +2,7 @@ import json
 import os
 import re
 
+from file_tools import AttachmentContext, AttachmentTool
 from model import ModelClient
 from web_tools import WebSearchTool
 
@@ -15,6 +16,18 @@ web_search(query)
 
 visit_webpage(url)
     Read the text of a webpage.
+
+attachment_summary()
+    Show metadata about the attached task file.
+
+read_attachment_text()
+    Read a text-like attached file, such as .py, .txt, .csv, .json, or .md.
+
+execute_python_attachment()
+    Run an attached Python file and return stdout/stderr.
+
+analyze_spreadsheet()
+    Read an attached spreadsheet and return sheets, columns, previews, and numeric sums.
 
 At each step, return ONLY valid JSON. Do not wrap it in markdown.
 Plain text answers are invalid. Explanations are invalid.
@@ -34,6 +47,13 @@ or:
     "args": {"url": "..."}
 }
 
+File tools do not require args:
+{
+    "type": "tool",
+    "tool": "attachment_summary",
+    "args": {}
+}
+
 When you have enough evidence:
 {
     "type": "final",
@@ -44,6 +64,7 @@ Continue researching when the available evidence is insufficient.
 For questions that do not require tools, answer directly with type="final".
 If the question asks about a source, website, article, paper, Wikipedia, a date-specific fact, a URL, a record, a season, or "as of" information, do not answer from memory. Use web_search first.
 Search result titles and URLs are not enough evidence for source-based questions. After web_search, use visit_webpage on the most relevant result before finalizing.
+If the question mentions an attached file, inspect it with an attachment tool before finalizing.
 Do not return a final answer saying that more research is needed. If more research is needed, call another tool.
 The final answer must follow the user's requested format exactly.
 If the question asks "how many", the final answer should usually be only the number.
@@ -56,9 +77,11 @@ class GaiaAgent:
         self,
         model_client: ModelClient | None = None,
         web_search: WebSearchTool | None = None,
+        attachment_tool: AttachmentTool | None = None,
     ):
         self.model_client = model_client or ModelClient()
         self.web_search = web_search or WebSearchTool()
+        self.attachment_tool = attachment_tool or AttachmentTool()
         self.web_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() == "true"
         self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "8"))
 
@@ -71,15 +94,17 @@ class GaiaAgent:
         """
         Solve one GAIA task and return only the final answer.
         """
-        if file_name:
-            return self._direct_answer(question)
-
         history = [
             {
                 "role": "user",
-                "content": f"Question:\n{question}",
+                "content": self._build_initial_message(question, task_id, file_name),
             }
         ]
+        attachment_context = (
+            AttachmentContext(task_id=task_id, file_name=file_name)
+            if file_name
+            else None
+        )
 
         last_response = ""
         for _ in range(self.max_steps):
@@ -97,8 +122,8 @@ class GaiaAgent:
                     question,
                 )
 
-            if action.get("type") == "tool" and self.web_enabled:
-                tool_result = self._execute_tool(action)
+            if action.get("type") == "tool":
+                tool_result = self._execute_tool(action, attachment_context)
                 history.append({"role": "assistant", "content": response})
                 history.append({"role": "tool", "content": tool_result})
                 continue
@@ -123,11 +148,33 @@ class GaiaAgent:
         )
         return self._clean_answer_for_question(answer, question)
 
-    def _execute_tool(self, action: dict) -> str:
+    def _build_initial_message(
+        self,
+        question: str,
+        task_id: str,
+        file_name: str | None,
+    ) -> str:
+        message = f"Question:\n{question}"
+        if file_name:
+            message += (
+                f"\n\nAttached file available:\n"
+                f"Task ID: {task_id}\n"
+                f"File name: {file_name}\n"
+                "Use attachment tools to inspect it before answering."
+            )
+        return message
+
+    def _execute_tool(
+        self,
+        action: dict,
+        attachment_context: AttachmentContext | None = None,
+    ) -> str:
         tool = action.get("tool")
         args = action.get("args") or {}
         try:
             if tool == "web_search":
+                if not self.web_enabled:
+                    return "Tool error: web search is disabled."
                 query = str(args.get("query", "")).strip()
                 if not query:
                     return "Tool error: missing query."
@@ -135,10 +182,32 @@ class GaiaAgent:
                 return self._format_search_results(results)
 
             if tool == "visit_webpage":
+                if not self.web_enabled:
+                    return "Tool error: web browsing is disabled."
                 url = str(args.get("url", "")).strip()
                 if not url:
                     return "Tool error: missing url."
                 return self.web_search.read_page(url)
+
+            if tool == "attachment_summary":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.attachment_tool.summary(attachment_context)
+
+            if tool == "read_attachment_text":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.attachment_tool.read_text(attachment_context)
+
+            if tool == "execute_python_attachment":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.attachment_tool.execute_python(attachment_context)
+
+            if tool == "analyze_spreadsheet":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.attachment_tool.analyze_spreadsheet(attachment_context)
 
             return f"Tool error: unknown tool {tool!r}."
         except Exception as error:
