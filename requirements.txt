@@ -2,3 +2,5 @@ gradio[oauth]
 requests
 pandas
 openpyxl
+pillow
+spaces

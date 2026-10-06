@@ -4,6 +4,11 @@ import gradio as gr
 import requests
 import pandas as pd
 from agent import GaiaAgent
+import spaces
+
+@spaces.GPU
+def _gpu_dummy():
+    return None
 
 # (Keep Constants as is)
 # --- Constants ---

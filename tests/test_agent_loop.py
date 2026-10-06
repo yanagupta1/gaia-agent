@@ -62,6 +62,30 @@ class FakeAttachmentTool:
         return "Sheet: Sheet1\nNumeric column sums:\nsales    10.50"
 
 
+class FakeMultimodalTool:
+    def __init__(self):
+        self.images = []
+        self.audio = []
+        self.videos = []
+        self.youtube_urls = []
+
+    def inspect_image(self, context):
+        self.images.append(context.file_name)
+        return "Image metadata: 640x480"
+
+    def transcribe_audio(self, context):
+        self.audio.append(context.file_name)
+        return "Transcript: strawberries sugar salt"
+
+    def inspect_video(self, context):
+        self.videos.append(context.file_name)
+        return "Video metadata: 10 seconds"
+
+    def youtube_research(self, url):
+        self.youtube_urls.append(url)
+        return "Transcript search result"
+
+
 class AgentLoopTests(unittest.TestCase):
     def test_returns_final_action(self):
         model = FakeModel([json.dumps({"type": "final", "answer": "right"})])
@@ -69,6 +93,7 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=FakeWeb(),
             attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("What is the opposite of left?", "task"), "right")
 
@@ -90,6 +115,7 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=web,
             attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("How many albums?", "task"), "5")
         self.assertEqual(web.searches, ["Mercedes Sosa albums"])
@@ -112,6 +138,7 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=web,
             attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("Read this page", "task"), "done")
         self.assertEqual(web.visits, ["https://example.test/page"])
@@ -127,6 +154,7 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=FakeWeb(),
             attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("Answer exactly", "task"), "clean final")
 
@@ -145,6 +173,7 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=FakeWeb(),
             attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("How many studio albums?", "task"), "4")
 
@@ -166,6 +195,7 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=FakeWeb(),
             attachment_tool=attachment_tool,
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("What is the output?", "task", "code.py"), "123")
         self.assertTrue(attachment_tool.executed)
@@ -188,9 +218,73 @@ class AgentLoopTests(unittest.TestCase):
             model_client=model,
             web_search=FakeWeb(),
             attachment_tool=attachment_tool,
+            multimodal_tool=FakeMultimodalTool(),
         )
         self.assertEqual(agent.run("Total sales?", "task", "sales.xlsx"), "$10.50")
         self.assertTrue(attachment_tool.analyzed)
+
+    def test_executes_image_tool(self):
+        model = FakeModel(
+            [
+                json.dumps({"type": "tool", "tool": "inspect_image", "args": {}}),
+                json.dumps({"type": "final", "answer": "Nf6"}),
+            ]
+        )
+        multimodal_tool = FakeMultimodalTool()
+        agent = GaiaAgent(
+            model_client=model,
+            web_search=FakeWeb(),
+            attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=multimodal_tool,
+        )
+        self.assertEqual(agent.run("Review the chess image.", "task", "board.png"), "Nf6")
+        self.assertEqual(multimodal_tool.images, ["board.png"])
+
+    def test_executes_audio_tool(self):
+        model = FakeModel(
+            [
+                json.dumps({"type": "tool", "tool": "transcribe_audio", "args": {}}),
+                json.dumps({"type": "final", "answer": "salt, strawberries, sugar"}),
+            ]
+        )
+        multimodal_tool = FakeMultimodalTool()
+        agent = GaiaAgent(
+            model_client=model,
+            web_search=FakeWeb(),
+            attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=multimodal_tool,
+        )
+        self.assertEqual(
+            agent.run("List ingredients from the audio.", "task", "recipe.mp3"),
+            "salt, strawberries, sugar",
+        )
+        self.assertEqual(multimodal_tool.audio, ["recipe.mp3"])
+
+    def test_executes_youtube_research_tool(self):
+        model = FakeModel(
+            [
+                json.dumps(
+                    {
+                        "type": "tool",
+                        "tool": "youtube_research",
+                        "args": {"url": "https://www.youtube.com/watch?v=test"},
+                    }
+                ),
+                json.dumps({"type": "final", "answer": "3"}),
+            ]
+        )
+        multimodal_tool = FakeMultimodalTool()
+        agent = GaiaAgent(
+            model_client=model,
+            web_search=FakeWeb(),
+            attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=multimodal_tool,
+        )
+        self.assertEqual(agent.run("Examine the video.", "task"), "3")
+        self.assertEqual(
+            multimodal_tool.youtube_urls,
+            ["https://www.youtube.com/watch?v=test"],
+        )
 
 
 if __name__ == "__main__":

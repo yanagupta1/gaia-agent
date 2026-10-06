@@ -4,6 +4,7 @@ import re
 
 from file_tools import AttachmentContext, AttachmentTool
 from model import ModelClient
+from multimodal_tools import MultimodalTool
 from web_tools import WebSearchTool
 
 
@@ -28,6 +29,18 @@ execute_python_attachment()
 
 analyze_spreadsheet()
     Read an attached spreadsheet and return sheets, columns, previews, and numeric sums.
+
+inspect_image()
+    Inspect an attached image file.
+
+transcribe_audio()
+    Transcribe an attached audio file if an audio backend is configured.
+
+inspect_video()
+    Inspect an attached video file if a video backend is configured.
+
+youtube_research(url)
+    Search for transcript/caption/context pages for a YouTube video URL.
 
 At each step, return ONLY valid JSON. Do not wrap it in markdown.
 Plain text answers are invalid. Explanations are invalid.
@@ -78,10 +91,15 @@ class GaiaAgent:
         model_client: ModelClient | None = None,
         web_search: WebSearchTool | None = None,
         attachment_tool: AttachmentTool | None = None,
+        multimodal_tool: MultimodalTool | None = None,
     ):
         self.model_client = model_client or ModelClient()
         self.web_search = web_search or WebSearchTool()
         self.attachment_tool = attachment_tool or AttachmentTool()
+        self.multimodal_tool = multimodal_tool or MultimodalTool(
+            attachment_tool=self.attachment_tool,
+            web_search=self.web_search,
+        )
         self.web_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() == "true"
         self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "4"))
 
@@ -208,6 +226,27 @@ class GaiaAgent:
                 if attachment_context is None:
                     return "Tool error: no attachment is available for this task."
                 return self.attachment_tool.analyze_spreadsheet(attachment_context)
+
+            if tool == "inspect_image":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.multimodal_tool.inspect_image(attachment_context)
+
+            if tool == "transcribe_audio":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.multimodal_tool.transcribe_audio(attachment_context)
+
+            if tool == "inspect_video":
+                if attachment_context is None:
+                    return "Tool error: no attachment is available for this task."
+                return self.multimodal_tool.inspect_video(attachment_context)
+
+            if tool == "youtube_research":
+                if not self.web_enabled:
+                    return "Tool error: web search is disabled."
+                url = str(args.get("url", "")).strip()
+                return self.multimodal_tool.youtube_research(url)
 
             return f"Tool error: unknown tool {tool!r}."
         except Exception as error:
