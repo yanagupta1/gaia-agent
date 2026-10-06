@@ -24,9 +24,12 @@ class AttachmentTool:
         self.api_url = (api_url or os.getenv("GAIA_API_URL") or DEFAULT_API_URL).rstrip("/")
         self.cache_dir = Path(cache_dir or os.getenv("ATTACHMENT_CACHE_DIR", ".gaia_files"))
         self.timeout_seconds = timeout_seconds or int(os.getenv("ATTACHMENT_TIMEOUT_SECONDS", "30"))
+        self.trust_python_attachments = (
+            os.getenv("TRUST_GAIA_PYTHON_ATTACHMENTS", "false").lower() == "true"
+        )
 
     def summary(self, context: AttachmentContext) -> str:
-        path = self.download(context)
+        path = self.download(context).resolve()
         return (
             f"Attachment path: {path}\n"
             f"File name: {context.file_name}\n"
@@ -35,14 +38,33 @@ class AttachmentTool:
         )
 
     def read_text(self, context: AttachmentContext, max_chars: int = 12000) -> str:
-        path = self.download(context)
+        path = self.download(context).resolve()
         suffix = path.suffix.lower()
         if suffix in {".txt", ".py", ".csv", ".json", ".md"}:
             return path.read_text(encoding="utf-8", errors="replace")[:max_chars]
         return f"Cannot read {suffix} attachment as plain text."
 
     def execute_python(self, context: AttachmentContext) -> str:
-        path = self.download(context)
+        """
+        Trusted benchmark-only executor.
+
+        This intentionally refuses to run by default because executing a downloaded
+        Python file on the host is unsafe outside a trusted benchmark setting. For
+        GAIA course runs, enable it explicitly with:
+
+            TRUST_GAIA_PYTHON_ATTACHMENTS=true
+
+        Longer term this should run inside an isolated sandbox/container and return
+        only captured stdout/stderr.
+        """
+        if not self.trust_python_attachments:
+            return (
+                "Tool error: Python attachment execution is disabled. "
+                "This is a trusted benchmark-only executor; set "
+                "TRUST_GAIA_PYTHON_ATTACHMENTS=true to enable it."
+            )
+
+        path = self.download(context).resolve()
         if path.suffix.lower() != ".py":
             return "Tool error: attachment is not a Python file."
         completed = subprocess.run(
