@@ -1,6 +1,7 @@
 .tmp/
 .venv/
 .gaia_files/
+.test_tmp/
 __pycache__/
 *.pyc
 *.log
