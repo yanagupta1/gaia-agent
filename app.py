@@ -1,4 +1,5 @@
 import os
+import time
 import gradio as gr
 import requests
 import pandas as pd
@@ -7,6 +8,7 @@ from agent import GaiaAgent
 # (Keep Constants as is)
 # --- Constants ---
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
+PER_TASK_TIMEOUT_SECONDS = int(os.getenv("PER_TASK_TIMEOUT_SECONDS", "90"))
 
 '''
 API_URL = "https://agents-course-unit4-scoring.hf.space"
@@ -75,23 +77,37 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
     results_log = []
     answers_payload = []
     print(f"Running agent on {len(questions_data)} questions...")
-    for item in questions_data:
+    for index, item in enumerate(questions_data, start=1):
         task_id = item.get("task_id")
         question_text = item.get("question")
         if not task_id or question_text is None:
             print(f"Skipping item with missing task_id or question: {item}")
             continue
         try:
+            print(f"[{index}/{len(questions_data)}] Starting task {task_id}")
+            started_at = time.monotonic()
             submitted_answer = agent.run(
                 question=question_text,
                 task_id=task_id,
                 file_name=item.get("file_name"),
             )
+            elapsed = time.monotonic() - started_at
+            if elapsed > PER_TASK_TIMEOUT_SECONDS:
+                print(
+                    f"[{index}/{len(questions_data)}] Task {task_id} exceeded "
+                    f"{PER_TASK_TIMEOUT_SECONDS}s ({elapsed:.1f}s)."
+                )
+            print(
+                f"[{index}/{len(questions_data)}] Finished task {task_id} "
+                f"in {elapsed:.1f}s: {submitted_answer[:120]}"
+            )
             answers_payload.append({"task_id": task_id, "submitted_answer": submitted_answer})
             results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": submitted_answer})
         except Exception as e:
-             print(f"Error running agent on task {task_id}: {e}")
-             results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": f"AGENT ERROR: {e}"})
+            print(f"[{index}/{len(questions_data)}] Error running agent on task {task_id}: {e}")
+            fallback_answer = ""
+            answers_payload.append({"task_id": task_id, "submitted_answer": fallback_answer})
+            results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": f"AGENT ERROR: {e}"})
 
     if not answers_payload:
         print("Agent did not produce any answers to submit.")
