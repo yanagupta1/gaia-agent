@@ -100,19 +100,6 @@ class WebSearchTool:
         extractor.feed(document)
         return extractor.text()[: self.page_char_limit]
 
-    def gather_evidence(self, query: str) -> str:
-        results = self.search(query)
-        evidence_blocks = []
-        for index, result in enumerate(results, start=1):
-            try:
-                page_text = self.read_page(result.url)
-            except Exception as error:
-                page_text = f"Could not read page: {error}"
-            evidence_blocks.append(
-                f"[{index}] {result.title}\nURL: {result.url}\nCONTENT: {page_text}"
-            )
-        return "\n\n".join(evidence_blocks)
-
     def _fetch_text(self, url: str) -> str:
         request = Request(url, headers={"User-Agent": USER_AGENT})
         with urlopen(request, timeout=self.timeout_seconds) as response:
