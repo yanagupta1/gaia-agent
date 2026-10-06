@@ -310,4 +310,9 @@ class GaiaAgent:
         for prefix in prefixes:
             if cleaned.startswith(prefix):
                 cleaned = cleaned[len(prefix) :].strip()
-        return cleaned.strip().strip('"').strip()
+        cleaned = cleaned.strip().strip('"').strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`").strip()
+            if cleaned.startswith("text"):
+                cleaned = cleaned[4:].strip()
+        return cleaned.strip()
