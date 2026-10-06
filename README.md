@@ -13,3 +13,29 @@ hf_oauth_expiration_minutes: 480
 ---
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+
+## Runtime configuration
+
+Local development uses Ollama by default:
+
+```text
+MODEL_PROVIDER=ollama
+OLLAMA_MODEL=qwen2:7b
+```
+
+Hugging Face Space evaluation should use the hosted router:
+
+```text
+MODEL_PROVIDER=hf
+HF_TOKEN=<space secret>
+HF_MODEL=Qwen/Qwen2.5-72B-Instruct
+MODEL_TIMEOUT_SECONDS=30
+AGENT_MAX_STEPS=4
+```
+
+Python attachment execution is disabled by default. Enable only for trusted GAIA
+benchmark files:
+
+```text
+TRUST_GAIA_PYTHON_ATTACHMENTS=true
+```
