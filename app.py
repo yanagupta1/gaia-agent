@@ -1,27 +1,29 @@
 import os
 import gradio as gr
 import requests
-import inspect
 import pandas as pd
+from agent import GaiaAgent
 
 # (Keep Constants as is)
 # --- Constants ---
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 
-# --- Basic Agent Definition ---
-# ----- THIS IS WERE YOU CAN BUILD WHAT YOU WANT ------
-class BasicAgent:
-    def __init__(self):
-        print("BasicAgent initialized.")
-    def __call__(self, question: str) -> str:
-        print(f"Agent received question (first 50 chars): {question[:50]}...")
-        fixed_answer = "This is a default answer."
-        print(f"Agent returning fixed answer: {fixed_answer}")
-        return fixed_answer
+'''
+API_URL = "https://agents-course-unit4-scoring.hf.space"
 
+questions = requests.get(f"{API_URL}/questions").json()
+
+print(f"Questions: {len(questions)}")
+
+for i, q in enumerate(questions, 1):
+    print(f"\n--- Question {i} ---")
+    print("Task ID:", q.get("task_id"))
+    print("Question:", q.get("question"))
+    print("File:", q.get("file_name"))
+'''
 def run_and_submit_all( profile: gr.OAuthProfile | None):
     """
-    Fetches all questions, runs the BasicAgent on them, submits all answers,
+    Fetches all questions, runs the GaiaAgent on them, submits all answers,
     and displays the results.
     """
     # --- Determine HF Space Runtime URL and Repo URL ---
@@ -40,7 +42,7 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
 
     # 1. Instantiate Agent ( modify this part to create your agent)
     try:
-        agent = BasicAgent()
+        agent = GaiaAgent()
     except Exception as e:
         print(f"Error instantiating agent: {e}")
         return f"Error initializing agent: {e}", None
@@ -80,7 +82,11 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
             print(f"Skipping item with missing task_id or question: {item}")
             continue
         try:
-            submitted_answer = agent(question_text)
+            submitted_answer = agent.run(
+                question=question_text,
+                task_id=task_id,
+                file_name=item.get("file_name"),
+            )
             answers_payload.append({"task_id": task_id, "submitted_answer": submitted_answer})
             results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": submitted_answer})
         except Exception as e:
