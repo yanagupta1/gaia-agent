@@ -18,16 +18,26 @@ class ModelClient:
     def __init__(self, config: ModelConfig | None = None):
         self.config = config or ModelConfig()
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_mode: bool = False,
+    ) -> str:
         if self.config.provider == "ollama":
-            return self._generate_ollama(system_prompt, user_prompt)
+            return self._generate_ollama(system_prompt, user_prompt, json_mode=json_mode)
 
         raise ValueError(
             f"Unsupported MODEL_PROVIDER={self.config.provider!r}. "
             "V0.1 supports MODEL_PROVIDER=ollama."
         )
 
-    def _generate_ollama(self, system_prompt: str, user_prompt: str) -> str:
+    def _generate_ollama(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_mode: bool = False,
+    ) -> str:
         url = f"{self.config.ollama_base_url.rstrip('/')}/api/chat"
         payload = {
             "model": self.config.ollama_model,
@@ -41,6 +51,8 @@ class ModelClient:
                 "num_predict": self.config.max_tokens,
             },
         }
+        if json_mode:
+            payload["format"] = "json"
         request = Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
