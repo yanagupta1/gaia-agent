@@ -8,80 +8,26 @@ from multimodal_tools import MultimodalTool
 from web_tools import WebSearchTool
 
 
-SYSTEM_PROMPT = """You are a GAIA benchmark agent.
+SYSTEM_PROMPT = """You are a GAIA benchmark agent. Respond with ONLY valid JSON (no markdown, no prose).
 
-You may use these tools:
+Tools:
+- web_search(query): web results (title, url, snippet)
+- visit_webpage(url): read a page's text
+- attachment_summary() / read_attachment_text(): inspect or read an attached file
+- execute_python_attachment() / analyze_spreadsheet(): run an attached .py / read a spreadsheet
+- inspect_image() / transcribe_audio() / inspect_video(): inspect attached media
+- youtube_research(url): find transcript/context for a YouTube URL
 
-web_search(query)
-    Search the web. Returns titles, URLs, and snippets.
+Tool call: {"type":"tool","tool":"web_search","args":{"query":"..."}}
+File tools take empty args: {"type":"tool","tool":"attachment_summary","args":{}}
+Final answer: {"type":"final","answer":"..."}
 
-visit_webpage(url)
-    Read the text of a webpage.
-
-attachment_summary()
-    Show metadata about the attached task file.
-
-read_attachment_text()
-    Read a text-like attached file, such as .py, .txt, .csv, .json, or .md.
-
-execute_python_attachment()
-    Run an attached Python file and return stdout/stderr.
-
-analyze_spreadsheet()
-    Read an attached spreadsheet and return sheets, columns, previews, and numeric sums.
-
-inspect_image()
-    Inspect an attached image file.
-
-transcribe_audio()
-    Transcribe an attached audio file if an audio backend is configured.
-
-inspect_video()
-    Inspect an attached video file if a video backend is configured.
-
-youtube_research(url)
-    Search for transcript/caption/context pages for a YouTube video URL.
-
-At each step, return ONLY valid JSON. Do not wrap it in markdown.
-Plain text answers are invalid. Explanations are invalid.
-
-To use a tool:
-{
-    "type": "tool",
-    "tool": "web_search",
-    "args": {"query": "..."}
-}
-
-or:
-
-{
-    "type": "tool",
-    "tool": "visit_webpage",
-    "args": {"url": "..."}
-}
-
-File tools do not require args:
-{
-    "type": "tool",
-    "tool": "attachment_summary",
-    "args": {}
-}
-
-When you have enough evidence:
-{
-    "type": "final",
-    "answer": "..."
-}
-
-Continue researching when the available evidence is insufficient.
-For questions that do not require tools, answer directly with type="final".
-If the question asks about a source, website, article, paper, Wikipedia, a date-specific fact, a URL, a record, a season, or "as of" information, do not answer from memory. Use web_search first.
-Search result titles and URLs are not enough evidence for source-based questions. After web_search, use visit_webpage on the most relevant result before finalizing.
-If the question mentions an attached file, inspect it with an attachment tool before finalizing.
-Do not return a final answer saying that more research is needed. If more research is needed, call another tool.
-The final answer must follow the user's requested format exactly.
-If the question asks "how many", the final answer should usually be only the number.
-Never include supporting sentences, source notes, or lists unless the user requested them.
+Rules:
+- For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory: web_search first, then visit_webpage the best result before finalizing.
+- If a file is attached, inspect it with an attachment tool before finalizing.
+- Never finalize by saying more research is needed; call another tool instead.
+- Decode/transform the question if it is reversed or encoded, then answer what it actually asks.
+- Match the requested answer format exactly. For "how many", answer with only the number. No extra words, labels, or lists unless requested.
 """
 
 
@@ -101,7 +47,7 @@ class GaiaAgent:
             web_search=self.web_search,
         )
         self.web_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() == "true"
-        self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "6"))
+        self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "5"))
 
     def run(
         self,
@@ -253,9 +199,34 @@ class GaiaAgent:
             return f"Tool error: {error}"
 
     def _format_history(self, history: list[dict]) -> str:
-        return "\n\n".join(
-            f"{item['role'].upper()}:\n{item['content']}" for item in history
-        )
+        """
+        Build the prompt history while keeping token use bounded: always keep the
+        first message (the question), then add the most recent messages within a
+        character budget, truncating any single long tool result. This stops web
+        page text from compounding across steps and blowing the daily token cap.
+        """
+        per_item_limit = int(os.getenv("HISTORY_ITEM_CHAR_LIMIT", "2500"))
+        total_limit = int(os.getenv("HISTORY_TOTAL_CHAR_LIMIT", "9000"))
+
+        def render(item: dict) -> str:
+            content = str(item["content"])
+            if len(content) > per_item_limit:
+                content = content[:per_item_limit] + "\n...[truncated]"
+            return f"{item['role'].upper()}:\n{content}"
+
+        if not history:
+            return ""
+        first = render(history[0])
+        recent: list[str] = []
+        used = len(first)
+        for item in reversed(history[1:]):
+            rendered = render(item)
+            if used + len(rendered) > total_limit:
+                break
+            recent.append(rendered)
+            used += len(rendered)
+        recent.reverse()
+        return "\n\n".join([first, *recent])
 
     def _format_search_results(self, results) -> str:
         if not results:

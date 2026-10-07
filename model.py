@@ -27,6 +27,7 @@ class ModelConfig:
     timeout_seconds: int = int(os.getenv("MODEL_TIMEOUT_SECONDS", "120"))
     max_tokens: int = int(os.getenv("MODEL_MAX_TOKENS", "512"))
     max_retries: int = int(os.getenv("MODEL_MAX_RETRIES", "5"))
+    max_retry_wait_seconds: float = float(os.getenv("MODEL_MAX_RETRY_WAIT_SECONDS", "45"))
 
 
 class ModelClient:
@@ -180,7 +181,16 @@ class ModelClient:
                 last_detail = detail
                 if error.code == 429 and attempt < self.config.max_retries:
                     wait = _parse_retry_after(error.headers, detail)
-                    time.sleep(min(wait, 30.0))
+                    # A huge wait means a daily/hard cap, not a transient per-minute
+                    # spike. Waiting it out would hang the run (and time out the
+                    # Space), so fail fast and let the caller move on.
+                    if wait > self.config.max_retry_wait_seconds:
+                        raise RuntimeError(
+                            f"{provider_label} rate limit exceeded and retry wait "
+                            f"({wait:.0f}s) is too long (likely a daily token cap): "
+                            f"{detail}"
+                        ) from error
+                    time.sleep(wait)
                     continue
                 raise RuntimeError(
                     f"{provider_label} request failed: HTTP {error.code}: {detail}"
