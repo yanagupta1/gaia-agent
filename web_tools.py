@@ -83,8 +83,8 @@ class WebSearchTool:
         page_char_limit: int | None = None,
         timeout_seconds: int | None = None,
     ):
-        self.max_results = max_results or int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
-        self.page_char_limit = page_char_limit or int(os.getenv("WEB_PAGE_CHAR_LIMIT", "6000"))
+        self.max_results = max_results or int(os.getenv("WEB_SEARCH_MAX_RESULTS", "3"))
+        self.page_char_limit = page_char_limit or int(os.getenv("WEB_PAGE_CHAR_LIMIT", "2500"))
         self.timeout_seconds = timeout_seconds or int(os.getenv("WEB_TIMEOUT_SECONDS", "20"))
 
     def search(self, query: str) -> list[SearchResult]:
