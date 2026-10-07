@@ -23,13 +23,25 @@ MODEL_PROVIDER=ollama
 OLLAMA_MODEL=qwen2:7b
 ```
 
-Hugging Face Space evaluation should use the hosted router:
+Hugging Face Space evaluation (recommended: Groq free tier — no GPU needed, so
+the Space can run on free CPU-basic hardware):
+
+```text
+MODEL_PROVIDER=groq
+GROQ_API_KEY=<space secret>        # free key from console.groq.com
+GROQ_MODEL=llama-3.3-70b-versatile
+MODEL_TIMEOUT_SECONDS=120
+AGENT_MAX_STEPS=4
+WEB_SEARCH_ENABLED=true
+```
+
+The HF Inference router is also supported when credits are available:
 
 ```text
 MODEL_PROVIDER=hf
 HF_TOKEN=<space secret>
 HF_MODEL=Qwen/Qwen2.5-72B-Instruct
-MODEL_TIMEOUT_SECONDS=30
+MODEL_TIMEOUT_SECONDS=120
 AGENT_MAX_STEPS=4
 ```
 

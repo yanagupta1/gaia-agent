@@ -101,7 +101,7 @@ class GaiaAgent:
             web_search=self.web_search,
         )
         self.web_enabled = os.getenv("WEB_SEARCH_ENABLED", "true").lower() == "true"
-        self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "4"))
+        self.max_steps = int(os.getenv("AGENT_MAX_STEPS", "6"))
 
     def run(
         self,
@@ -289,12 +289,31 @@ class GaiaAgent:
         answer = self.model_client.generate(
             system_prompt=(
                 "Return the best exact final answer to the user's original question "
-                "using the conversation and tool results. Return only the answer."
+                "using the conversation and tool results. Return only the answer "
+                "text with no explanation, no labels, and no JSON. Do not return a "
+                "tool call. If the evidence is insufficient, give your single best "
+                "guess as a plain answer."
             ),
             user_prompt=f"Original question:\n{question}\n\nHistory:\n{self._format_history(history)}",
         )
         cleaned = self._clean_answer_for_question(answer, question)
-        return cleaned or self._clean_answer(last_response)
+        if self._looks_like_tool_json(cleaned):
+            cleaned = ""
+        fallback = self._clean_answer(last_response)
+        if self._looks_like_tool_json(fallback):
+            fallback = ""
+        return cleaned or fallback
+
+    def _looks_like_tool_json(self, text: str) -> bool:
+        """Detect leaked protocol JSON so it is never returned as a final answer."""
+        stripped = text.strip()
+        if not stripped.startswith("{"):
+            return False
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            return '"type"' in stripped and '"tool"' in stripped
+        return isinstance(parsed, dict) and parsed.get("type") in {"tool", "final"}
 
     def _clean_answer_for_question(self, answer: str, question: str) -> str:
         cleaned = self._clean_answer(answer)
