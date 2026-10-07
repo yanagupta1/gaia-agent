@@ -6,3 +6,4 @@ local_runs/
 __pycache__/
 *.pyc
 *.log
+groq_key.txt
