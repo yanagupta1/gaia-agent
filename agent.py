@@ -6,12 +6,15 @@ from file_tools import AttachmentContext, AttachmentTool
 from model import ModelClient
 from multimodal_tools import MultimodalTool
 from web_tools import WebSearchTool
+from wikipedia_tools import WikipediaTool
 
 
 SYSTEM_PROMPT = """You are a GAIA benchmark agent. Respond with ONLY valid JSON (no markdown, no prose).
 
 Tools:
-- web_search(query): web results (title, url, snippet)
+- wikipedia_search(query): search Wikipedia (deterministic, preferred for facts likely on Wikipedia)
+- wikipedia_page(title, wikitext): read a Wikipedia page's clean text; pass "wikitext": true for tables, lists, standings, discographies, or results
+- web_search(query): general web results (title, url, snippet)
 - visit_webpage(url): read a page's text
 - attachment_summary() / read_attachment_text(): inspect or read an attached file
 - execute_python_attachment() / analyze_spreadsheet(): run an attached .py / read a spreadsheet
@@ -25,7 +28,8 @@ Code: {"type":"tool","tool":"run_python","args":{"code":"print(2+2)"}}
 Final answer: {"type":"final","answer":"..."}
 
 Rules:
-- For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory: web_search first, then visit_webpage the best result before finalizing.
+- For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory.
+- Prefer wikipedia_search then wikipedia_page for anything likely on Wikipedia (people, places, works, records, standings, discographies, Olympics, competitions). Use wikitext=true when the fact is in a table or list. Fall back to web_search + visit_webpage only when Wikipedia does not have it.
 - For any arithmetic, counting, set/logic, table analysis, or text manipulation (reversing/decoding strings, slicing, sorting), write and run Python via run_python instead of doing it in your head. For a reversed sentence, run_python with text[::-1].
 - If a file is attached, inspect it with an attachment tool before finalizing.
 - Never finalize by saying more research is needed; call another tool instead.
@@ -42,9 +46,11 @@ class GaiaAgent:
         web_search: WebSearchTool | None = None,
         attachment_tool: AttachmentTool | None = None,
         multimodal_tool: MultimodalTool | None = None,
+        wikipedia_tool: WikipediaTool | None = None,
     ):
         self.model_client = model_client or ModelClient()
         self.web_search = web_search or WebSearchTool()
+        self.wikipedia_tool = wikipedia_tool or WikipediaTool()
         self.attachment_tool = attachment_tool or AttachmentTool()
         self.multimodal_tool = multimodal_tool or MultimodalTool(
             attachment_tool=self.attachment_tool,
@@ -201,6 +207,23 @@ class GaiaAgent:
             if tool == "run_python":
                 code = str(args.get("code", ""))
                 return self.attachment_tool.run_python(code)
+
+            if tool == "wikipedia_search":
+                if not self.web_enabled:
+                    return "Tool error: web search is disabled."
+                query = str(args.get("query", "")).strip()
+                if not query:
+                    return "Tool error: missing query."
+                return self.wikipedia_tool.search(query)
+
+            if tool == "wikipedia_page":
+                if not self.web_enabled:
+                    return "Tool error: web search is disabled."
+                title = str(args.get("title", "")).strip()
+                if not title:
+                    return "Tool error: missing title."
+                wikitext = bool(args.get("wikitext", False))
+                return self.wikipedia_tool.get_page(title, wikitext=wikitext)
 
             return f"Tool error: unknown tool {tool!r}."
         except Exception as error:
