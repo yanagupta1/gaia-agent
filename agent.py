@@ -26,9 +26,10 @@ Final answer: {"type":"final","answer":"..."}
 
 Rules:
 - For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory: web_search first, then visit_webpage the best result before finalizing.
-- For any arithmetic, counting, set/logic, or table analysis, write and run Python via run_python instead of computing in your head.
+- For any arithmetic, counting, set/logic, table analysis, or text manipulation (reversing/decoding strings, slicing, sorting), write and run Python via run_python instead of doing it in your head. For a reversed sentence, run_python with text[::-1].
 - If a file is attached, inspect it with an attachment tool before finalizing.
 - Never finalize by saying more research is needed; call another tool instead.
+- Base answers only on tool results. Do NOT invent facts, quotes, names, or numbers. If web_search/visit_webpage did not confirm it, search again or visit another result rather than guessing.
 - Decode/transform the question if it is reversed or encoded, then answer what it actually asks.
 - Match the requested answer format exactly. For "how many", answer with only the number. No extra words, labels, or lists unless requested.
 """
@@ -295,11 +296,26 @@ class GaiaAgent:
 
     def _clean_answer_for_question(self, answer: str, question: str) -> str:
         cleaned = self._clean_answer(answer)
-        if question.strip().lower().startswith("how many"):
+        lowered = question.strip().lower()
+        if lowered.startswith("how many"):
             match = re.search(r"\b\d+\b", cleaned)
             if match:
                 return match.group(0)
+        if "without abbreviation" in lowered:
+            cleaned = self._expand_abbreviations(cleaned)
         return cleaned
+
+    @staticmethod
+    def _expand_abbreviations(text: str) -> str:
+        """Expand common place-name abbreviations when the question forbids them."""
+        replacements = {
+            r"\bSt\b\.?": "Saint",
+            r"\bMt\b\.?": "Mount",
+            r"\bFt\b\.?": "Fort",
+        }
+        for pattern, full in replacements.items():
+            text = re.sub(pattern, full, text)
+        return re.sub(r"\s+", " ", text).strip()
 
     def _clean_answer(self, answer: str) -> str:
         cleaned = answer.strip()

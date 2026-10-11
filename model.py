@@ -137,6 +137,36 @@ class ModelClient:
         provider_label: str,
         json_mode: bool = False,
     ) -> str:
+        try:
+            data = self._post_chat(
+                api_url, model, token, provider_label,
+                system_prompt, user_prompt, json_mode=json_mode,
+            )
+        except RuntimeError as error:
+            # Some HF-router providers reject response_format=json_object with a 400.
+            # The prompt already demands JSON, so retry once without JSON mode.
+            if json_mode and "HTTP 400" in str(error):
+                data = self._post_chat(
+                    api_url, model, token, provider_label,
+                    system_prompt, user_prompt, json_mode=False,
+                )
+            else:
+                raise
+        choices = data.get("choices", [])
+        if not choices:
+            raise RuntimeError(f"{provider_label} returned no choices: {data}")
+        return choices[0].get("message", {}).get("content", "").strip()
+
+    def _post_chat(
+        self,
+        api_url: str,
+        model: str,
+        token: str,
+        provider_label: str,
+        system_prompt: str,
+        user_prompt: str,
+        json_mode: bool,
+    ) -> dict:
         payload = {
             "model": model,
             "messages": [
@@ -160,11 +190,7 @@ class ModelClient:
             },
             method="POST",
         )
-        data = self._send_with_retry(request, provider_label)
-        choices = data.get("choices", [])
-        if not choices:
-            raise RuntimeError(f"{provider_label} returned no choices: {data}")
-        return choices[0].get("message", {}).get("content", "").strip()
+        return self._send_with_retry(request, provider_label)
 
     def _send_with_retry(self, request, provider_label: str) -> dict:
         """
@@ -191,6 +217,11 @@ class ModelClient:
                             f"{detail}"
                         ) from error
                     time.sleep(wait)
+                    continue
+                # Transient gateway/server errors (e.g. HF router 504) are worth
+                # retrying with a short exponential backoff.
+                if error.code in {500, 502, 503, 504} and attempt < self.config.max_retries:
+                    time.sleep(min(2.0 ** attempt, self.config.max_retry_wait_seconds))
                     continue
                 raise RuntimeError(
                     f"{provider_label} request failed: HTTP {error.code}: {detail}"
