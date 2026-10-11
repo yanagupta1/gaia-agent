@@ -17,13 +17,16 @@ Tools:
 - execute_python_attachment() / analyze_spreadsheet(): run an attached .py / read a spreadsheet
 - inspect_image() / transcribe_audio() / inspect_video(): inspect attached media
 - youtube_research(url): find transcript/context for a YouTube URL
+- run_python(code): run short Python you write; returns stdout. Use it to compute, not to guess.
 
 Tool call: {"type":"tool","tool":"web_search","args":{"query":"..."}}
 File tools take empty args: {"type":"tool","tool":"attachment_summary","args":{}}
+Code: {"type":"tool","tool":"run_python","args":{"code":"print(2+2)"}}
 Final answer: {"type":"final","answer":"..."}
 
 Rules:
 - For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory: web_search first, then visit_webpage the best result before finalizing.
+- For any arithmetic, counting, set/logic, or table analysis, write and run Python via run_python instead of computing in your head.
 - If a file is attached, inspect it with an attachment tool before finalizing.
 - Never finalize by saying more research is needed; call another tool instead.
 - Decode/transform the question if it is reversed or encoded, then answer what it actually asks.
@@ -193,6 +196,10 @@ class GaiaAgent:
                     return "Tool error: web search is disabled."
                 url = str(args.get("url", "")).strip()
                 return self.multimodal_tool.youtube_research(url)
+
+            if tool == "run_python":
+                code = str(args.get("code", ""))
+                return self.attachment_tool.run_python(code)
 
             return f"Tool error: unknown tool {tool!r}."
         except Exception as error:

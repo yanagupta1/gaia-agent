@@ -51,6 +51,23 @@ class FileToolsTests(unittest.TestCase):
         self.assertIn("Return code: 0", result)
         self.assertIn("123", result)
 
+    def test_run_python_disabled_by_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            tool = AttachmentTool()
+            result = tool.run_python("print(1)")
+        self.assertIn("disabled", result)
+
+    def test_run_python_computes_when_trusted(self):
+        with patch.dict(
+            os.environ,
+            {"TRUST_GAIA_PYTHON_ATTACHMENTS": "true"},
+            clear=True,
+        ):
+            tool = AttachmentTool()
+            result = tool.run_python("print(6 * 7)")
+        self.assertIn("Return code: 0", result)
+        self.assertIn("42", result)
+
 
 if __name__ == "__main__":
     unittest.main()

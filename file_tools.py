@@ -82,6 +82,37 @@ class AttachmentTool:
             f"STDERR:\n{error}"
         ).strip()
 
+    def run_python(self, code: str) -> str:
+        """
+        General-purpose code interpreter: run short Python the model itself wrote
+        and return stdout/stderr. This lets the agent compute math, logic, set, and
+        counting answers deterministically instead of guessing. Gated behind the
+        same trust flag as attachment execution, since it runs on the host.
+        """
+        if not self.trust_python_attachments:
+            return (
+                "Tool error: python execution is disabled. "
+                "Set TRUST_GAIA_PYTHON_ATTACHMENTS=true to enable it."
+            )
+        if not code or not code.strip():
+            return "Tool error: no code provided."
+        try:
+            completed = subprocess.run(
+                ["python", "-c", code],
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            return f"Tool error: code timed out after {self.timeout_seconds}s."
+        output = completed.stdout.strip()
+        error = completed.stderr.strip()
+        return (
+            f"Return code: {completed.returncode}\n"
+            f"STDOUT:\n{output}\n"
+            f"STDERR:\n{error}"
+        ).strip()
+
     def analyze_spreadsheet(self, context: AttachmentContext) -> str:
         import pandas as pd
 
