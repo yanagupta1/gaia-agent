@@ -31,6 +31,8 @@ Rules:
 - Never finalize by saying more research is needed; call another tool instead.
 - Base answers only on tool results. Do NOT invent facts, quotes, names, or numbers. If web_search/visit_webpage did not confirm it, search again or visit another result rather than guessing.
 - Decode/transform the question if it is reversed or encoded, then answer what it actually asks.
+- When listing items taken from a source (a recipe, transcript, or document), keep each item's full descriptive wording (e.g. "freshly squeezed lemon juice", "pure vanilla extract") and only drop quantities/measurements. Do not shorten the names.
+- Format comma-separated lists as "item, item, item" with a single space after each comma.
 - Match the requested answer format exactly. For "how many", answer with only the number. No extra words, labels, or lists unless requested.
 """
 
@@ -352,4 +354,18 @@ class GaiaAgent:
             cleaned = cleaned.strip("`").strip()
             if cleaned.startswith("text"):
                 cleaned = cleaned[4:].strip()
-        return cleaned.strip()
+        return self._normalize_format(cleaned.strip())
+
+    @staticmethod
+    def _normalize_format(text: str) -> str:
+        """
+        Match GAIA's expected answer formatting: comma-separated lists use a
+        single ", " between items (the scorer is near-exact and does not
+        normalize spacing), and a leading currency symbol is dropped.
+        """
+        if not text:
+            return text
+        text = text.lstrip("$").strip()
+        if "," in text and "\n" not in text:
+            text = ", ".join(part.strip() for part in text.split(",") if part.strip())
+        return text

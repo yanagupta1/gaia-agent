@@ -220,8 +220,19 @@ class AgentLoopTests(unittest.TestCase):
             attachment_tool=attachment_tool,
             multimodal_tool=FakeMultimodalTool(),
         )
-        self.assertEqual(agent.run("Total sales?", "task", "sales.xlsx"), "$10.50")
+        # Leading currency symbol is stripped to match GAIA's plain-number format.
+        self.assertEqual(agent.run("Total sales?", "task", "sales.xlsx"), "10.50")
         self.assertTrue(attachment_tool.analyzed)
+
+    def test_normalizes_comma_list_spacing(self):
+        model = FakeModel([json.dumps({"type": "final", "answer": "b,e"})])
+        agent = GaiaAgent(
+            model_client=model,
+            web_search=FakeWeb(),
+            attachment_tool=FakeAttachmentTool(),
+            multimodal_tool=FakeMultimodalTool(),
+        )
+        self.assertEqual(agent.run("Which elements?", "task", None), "b, e")
 
     def test_executes_image_tool(self):
         model = FakeModel(
