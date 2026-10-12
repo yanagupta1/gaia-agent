@@ -26,7 +26,7 @@ Final answer: {"type":"final","answer":"..."}
 
 Rules:
 - For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory: web_search first, then visit_webpage the best result before finalizing.
-- For any arithmetic, counting, set/logic, table analysis, or text manipulation (reversing/decoding strings, slicing, sorting), write and run Python via run_python instead of doing it in your head. For a reversed sentence, run_python with text[::-1].
+- For any arithmetic, counting, set/logic, table analysis, or text manipulation (reversing/decoding strings, slicing, sorting), write and run Python via run_python instead of doing it in your head. For a reversed sentence, run_python with text[::-1]. For whether an operation is commutative/associative or to find counter-examples from an operation table, build the table in run_python and check every pair programmatically; never reason it out by hand.
 - If a file is attached, inspect it with an attachment tool before finalizing.
 - Never finalize by saying more research is needed; call another tool instead.
 - Base answers only on tool results. Do NOT invent facts, quotes, names, or numbers. If web_search/visit_webpage did not confirm it, search again or visit another result rather than guessing.
@@ -123,6 +123,12 @@ class GaiaAgent:
         file_name: str | None,
     ) -> str:
         message = f"Question:\n{question}"
+        decoded = self._maybe_decode_reversed(question)
+        if decoded:
+            message += (
+                f"\n\nThis question appears to be written in reverse. Decoded:\n{decoded}\n"
+                "Answer the decoded question (do exactly what it asks)."
+            )
         if file_name:
             message += (
                 f"\n\nAttached file available:\n"
@@ -131,6 +137,24 @@ class GaiaAgent:
                 "Use attachment tools to inspect it before answering."
             )
         return message
+
+    _COMMON_WORDS = {
+        "the", "and", "you", "what", "write", "word", "answer", "sentence",
+        "of", "is", "a", "to", "in", "if", "opposite", "this", "understand",
+    }
+
+    @classmethod
+    def _maybe_decode_reversed(cls, question: str) -> str | None:
+        """Detect and decode a character-reversed question (general, not per-task)."""
+        reversed_text = question[::-1]
+
+        def score(text: str) -> int:
+            words = re.findall(r"[a-z]+", text.lower())
+            return sum(1 for word in words if word in cls._COMMON_WORDS)
+
+        if score(reversed_text) >= 3 and score(reversed_text) > score(question):
+            return reversed_text
+        return None
 
     def _execute_tool(
         self,
