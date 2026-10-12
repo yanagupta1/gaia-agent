@@ -2,10 +2,14 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
+DEFAULT_GAIA_DATASET_URL = (
+    "https://huggingface.co/datasets/gaia-benchmark/GAIA/resolve/main/2023/validation"
+)
 
 
 @dataclass(frozen=True)
@@ -27,6 +31,7 @@ class AttachmentTool:
         self.trust_python_attachments = (
             os.getenv("TRUST_GAIA_PYTHON_ATTACHMENTS", "false").lower() == "true"
         )
+        self.dataset_url = os.getenv("GAIA_DATASET_FILES_URL", DEFAULT_GAIA_DATASET_URL).rstrip("/")
 
     def summary(self, context: AttachmentContext) -> str:
         path = self.download(context).resolve()
@@ -165,9 +170,36 @@ class AttachmentTool:
         if path.exists():
             return path
 
-        url = f"{self.api_url}/files/{context.task_id}"
-        request = Request(url, headers={"User-Agent": "gaia-agent/0.3"})
-        with urlopen(request, timeout=self.timeout_seconds) as response:
-            data = response.read()
+        data = self._fetch_scoring_api(context) or self._fetch_gaia_dataset(context)
+        if data is None:
+            raise RuntimeError(
+                f"Could not download file for task {context.task_id}. The scoring "
+                "API has no file for it; set HF_TOKEN (with gated-repo read) so it "
+                "can be fetched from the gaia-benchmark/GAIA dataset."
+            )
         path.write_bytes(data)
         return path
+
+    def _fetch_scoring_api(self, context: AttachmentContext) -> bytes | None:
+        url = f"{self.api_url}/files/{context.task_id}"
+        request = Request(url, headers={"User-Agent": "gaia-agent/0.6"})
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                return response.read()
+        except Exception:
+            return None
+
+    def _fetch_gaia_dataset(self, context: AttachmentContext) -> bytes | None:
+        token = os.getenv("HF_TOKEN", "").strip()
+        if not token or not context.file_name:
+            return None
+        url = f"{self.dataset_url}/{quote(context.file_name)}"
+        request = Request(
+            url,
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "gaia-agent/0.6"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                return response.read()
+        except Exception:
+            return None
