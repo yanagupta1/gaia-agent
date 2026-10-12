@@ -64,13 +64,41 @@ class MultimodalTool:
         if suffix not in AUDIO_EXTENSIONS:
             return f"Tool error: {context.file_name} is not a supported audio file."
 
+        backend = self.audio_backend or ("groq" if os.getenv("GROQ_API_KEY") else "")
+        if backend == "groq":
+            return self._transcribe_groq(path)
+
         details = [self._file_metadata(path)]
-        if not self.audio_backend:
-            details.append(
-                "Audio backend is not configured. Set AUDIO_BACKEND to a real "
-                "transcription backend before expecting audio answers."
-            )
+        details.append(
+            "Audio backend is not configured. Set GROQ_API_KEY (and optionally "
+            "AUDIO_BACKEND=groq) to transcribe with whisper-large-v3."
+        )
         return "\n\n".join(details)
+
+    def _transcribe_groq(self, path: Path) -> str:
+        import requests
+
+        key = os.getenv("GROQ_API_KEY", "").strip()
+        if not key:
+            return "Tool error: GROQ_API_KEY is required for audio transcription."
+        model = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3")
+        try:
+            with open(path, "rb") as audio_file:
+                response = requests.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {key}"},
+                    files={"file": (path.name, audio_file)},
+                    data={"model": model, "response_format": "text", "temperature": "0"},
+                    timeout=int(os.getenv("AUDIO_TIMEOUT_SECONDS", "120")),
+                )
+        except Exception as error:
+            return f"Tool error: audio transcription request failed: {error}"
+        if response.status_code != 200:
+            return (
+                f"Tool error: Groq transcription failed HTTP {response.status_code}: "
+                f"{response.text[:300]}"
+            )
+        return f"Transcript:\n{response.text.strip()}"
 
     def inspect_video(self, context: AttachmentContext) -> str:
         path = self.attachment_tool.download(context).resolve()
