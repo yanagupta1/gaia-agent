@@ -3,4 +3,3 @@ requests
 pandas
 openpyxl
 pillow
-spaces

@@ -108,16 +108,6 @@ class GaiaAgent:
 
         return self._finalize_after_steps(question, history, last_response)
 
-    def _direct_answer(self, question: str) -> str:
-        answer = self.model_client.generate(
-            system_prompt=(
-                "Answer the user's question. Return only the final answer, "
-                "with no explanation, no markdown, and no label."
-            ),
-            user_prompt=question,
-        )
-        return self._clean_answer_for_question(answer, question)
-
     def _build_initial_message(
         self,
         question: str,

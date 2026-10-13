@@ -4,30 +4,12 @@ import gradio as gr
 import requests
 import pandas as pd
 from agent import GaiaAgent
-import spaces
 
-@spaces.GPU
-def _gpu_dummy():
-    return None
-
-# (Keep Constants as is)
 # --- Constants ---
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 PER_TASK_TIMEOUT_SECONDS = int(os.getenv("PER_TASK_TIMEOUT_SECONDS", "90"))
 
-'''
-API_URL = "https://agents-course-unit4-scoring.hf.space"
 
-questions = requests.get(f"{API_URL}/questions").json()
-
-print(f"Questions: {len(questions)}")
-
-for i, q in enumerate(questions, 1):
-    print(f"\n--- Question {i} ---")
-    print("Task ID:", q.get("task_id"))
-    print("Question:", q.get("question"))
-    print("File:", q.get("file_name"))
-'''
 def run_and_submit_all( profile: gr.OAuthProfile | None):
     """
     Fetches all questions, runs the GaiaAgent on them, submits all answers,
