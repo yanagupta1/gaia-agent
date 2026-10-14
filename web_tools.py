@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+from urllib.parse import parse_qs, quote, quote_plus, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -94,17 +94,96 @@ class WebSearchTool:
             results = self._search_tavily(query)
             if results:
                 return results
-        return self._search_duckduckgo(query)
+        # Lead with Wikipedia API hits (free, reliable) then DuckDuckGo.
+        wiki = self._search_wikipedia(query)
+        duck = self._search_duckduckgo(query)
+        seen, merged = set(), []
+        for result in wiki + duck:
+            if result.url and result.url not in seen:
+                seen.add(result.url)
+                merged.append(result)
+        return merged[: self.max_results]
 
     def read_page(self, url: str) -> str:
         if self.tavily_key:
             content = self._extract_tavily(url)
             if content:
                 return content[: self.page_char_limit]
+        if "wikipedia.org/wiki/" in url:
+            content = self._read_wikipedia(url)
+            if content:
+                return content[: self.page_char_limit]
         document = self._fetch_text(url)
         extractor = TextExtractor()
         extractor.feed(document)
         return extractor.text()[: self.page_char_limit]
+
+    def _wiki_api(self, params: dict) -> dict:
+        params = {**params, "format": "json", "formatversion": "2"}
+        url = "https://en.wikipedia.org/w/api.php?" + urlencode(params)
+        request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+        with urlopen(request, timeout=self.timeout_seconds) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def _search_wikipedia(self, query: str) -> list[SearchResult]:
+        try:
+            data = self._wiki_api(
+                {
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": query,
+                    "srlimit": self.max_results,
+                    "srnamespace": "0|4",
+                }
+            )
+        except Exception:
+            return []
+        results = []
+        for hit in data.get("query", {}).get("search", []):
+            title = hit["title"]
+            snippet = re.sub(r"<.*?>", "", hit.get("snippet", "")).strip()
+            slug = title.replace(" ", "_")
+            results.append(
+                SearchResult(
+                    title=f"Wikipedia: {title}",
+                    url=f"https://en.wikipedia.org/wiki/{quote(slug)}",
+                    snippet=snippet,
+                )
+            )
+        return results
+
+    def _read_wikipedia(self, url: str) -> str:
+        try:
+            raw_title = url.split("/wiki/", 1)[1].split("#")[0]
+            title = unquote(raw_title).replace("_", " ")
+        except Exception:
+            return ""
+        try:
+            data = self._wiki_api(
+                {
+                    "action": "query",
+                    "prop": "extracts",
+                    "explaintext": "1",
+                    "titles": title,
+                    "redirects": "1",
+                }
+            )
+            pages = data.get("query", {}).get("pages", [])
+            extract = pages[0].get("extract", "") if pages and not pages[0].get("missing") else ""
+        except Exception:
+            extract = ""
+        tables = ""
+        try:
+            parsed = self._wiki_api(
+                {"action": "parse", "page": title, "prop": "wikitext", "redirects": "1"}
+            )
+            wikitext = parsed.get("parse", {}).get("wikitext", "")
+            blocks = re.findall(r"\{\|.*?\|\}", wikitext, re.DOTALL)
+            if blocks:
+                tables = "\n\nTABLES (wikitext):\n" + "\n\n".join(blocks[:3])
+        except Exception:
+            tables = ""
+        return (extract + tables).strip()
 
     def _search_duckduckgo(self, query: str) -> list[SearchResult]:
         url = f"https://duckduckgo.com/html/?q={quote_plus(query)}"

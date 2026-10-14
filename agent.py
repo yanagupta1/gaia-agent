@@ -237,8 +237,8 @@ class GaiaAgent:
         character budget, truncating any single long tool result. This stops web
         page text from compounding across steps and blowing the daily token cap.
         """
-        per_item_limit = int(os.getenv("HISTORY_ITEM_CHAR_LIMIT", "2500"))
-        total_limit = int(os.getenv("HISTORY_TOTAL_CHAR_LIMIT", "9000"))
+        per_item_limit = int(os.getenv("HISTORY_ITEM_CHAR_LIMIT", "8000"))
+        total_limit = int(os.getenv("HISTORY_TOTAL_CHAR_LIMIT", "24000"))
 
         def render(item: dict) -> str:
             content = str(item["content"])
