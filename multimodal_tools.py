@@ -114,6 +114,40 @@ class MultimodalTool:
             )
         return "\n\n".join(details)
 
+    def youtube_transcribe(self, url: str) -> str:
+        """Download a YouTube video's audio and transcribe it (for 'what does X say' questions)."""
+        if not url.strip():
+            return "Tool error: missing YouTube URL."
+        if not os.getenv("GROQ_API_KEY", "").strip():
+            return "Tool error: GROQ_API_KEY is required to transcribe audio."
+        try:
+            import yt_dlp
+        except ImportError:
+            return "Tool error: yt-dlp is not installed."
+
+        cache = self.attachment_tool.cache_dir
+        cache.mkdir(parents=True, exist_ok=True)
+        out_template = str(cache / "yt_audio.%(ext)s")
+        options = {
+            "format": "bestaudio/best",
+            "outtmpl": out_template,
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "overwrites": True,
+        }
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info(url, download=True)
+                path = Path(ydl.prepare_filename(info))
+        except Exception as error:
+            return f"Tool error: could not download YouTube audio: {error}"
+        if not path.exists():
+            return "Tool error: YouTube audio download produced no file."
+        if path.stat().st_size > 24 * 1024 * 1024:
+            return "Tool error: audio is too large to transcribe (over 24MB)."
+        return self._transcribe_groq(path)
+
     def youtube_research(self, url: str) -> str:
         if not url.strip():
             return "Tool error: missing YouTube URL."

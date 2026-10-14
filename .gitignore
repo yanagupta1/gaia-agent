@@ -8,3 +8,4 @@ __pycache__/
 *.log
 groq_key.txt
 hf_token.txt
+tavily_key.txt

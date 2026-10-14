@@ -16,7 +16,8 @@ Tools:
 - attachment_summary() / read_attachment_text(): inspect or read an attached file
 - execute_python_attachment() / analyze_spreadsheet(): run an attached .py / read a spreadsheet
 - inspect_image() / transcribe_audio() / inspect_video(): inspect attached media
-- youtube_research(url): find transcript/context for a YouTube URL
+- youtube_research(url): find transcript/context pages for a YouTube URL
+- youtube_transcribe(url): download a YouTube video's audio and transcribe what is spoken
 - run_python(code): run short Python you write; returns stdout. Use it to compute, not to guess.
 
 Tool call: {"type":"tool","tool":"web_search","args":{"query":"..."}}
@@ -27,11 +28,12 @@ Final answer: {"type":"final","answer":"..."}
 Rules:
 - For facts about sources, articles, Wikipedia, dates, records, seasons, or "as of" info, do NOT answer from memory: web_search first, then visit_webpage the best result before finalizing.
 - For any arithmetic, counting, set/logic, table analysis, or text manipulation (reversing/decoding strings, slicing, sorting), write and run Python via run_python instead of doing it in your head. For a reversed sentence, run_python with text[::-1]. For whether an operation is commutative/associative or to find counter-examples from an operation table, build the table in run_python and check every pair programmatically; never reason it out by hand.
+- For a YouTube video where the question asks what someone says or how they respond, use youtube_transcribe(url) to get the spoken words before answering.
 - If a file is attached, inspect it with an attachment tool before finalizing.
 - Never finalize by saying more research is needed; call another tool instead.
 - Base answers only on tool results. Do NOT invent facts, quotes, names, or numbers. If web_search/visit_webpage did not confirm it, search again or visit another result rather than guessing.
 - Decode/transform the question if it is reversed or encoded, then answer what it actually asks.
-- When listing items taken from a source (a recipe, transcript, or document), keep each item's full descriptive wording (e.g. "freshly squeezed lemon juice", "pure vanilla extract") and only drop quantities/measurements. Do not shorten the names.
+- When listing items taken from a source (a recipe, transcript, or document), copy each item's noun phrase VERBATIM from the source text, including every adjective. If the source says "freshly squeezed lemon juice" or "pure vanilla extract", write exactly that, never the shortened "lemon juice" or "vanilla extract". Only remove quantity/measurement words (e.g. "two cups of", "a dash of", "a pinch of").
 - Format comma-separated lists as "item, item, item" with a single space after each comma.
 - Match the requested answer format exactly. For "how many", answer with only the number. No extra words, labels, or lists unless requested.
 """
@@ -214,6 +216,12 @@ class GaiaAgent:
                 url = str(args.get("url", "")).strip()
                 return self.multimodal_tool.youtube_research(url)
 
+            if tool == "youtube_transcribe":
+                if not self.web_enabled:
+                    return "Tool error: web search is disabled."
+                url = str(args.get("url", "")).strip()
+                return self.multimodal_tool.youtube_transcribe(url)
+
             if tool == "run_python":
                 code = str(args.get("code", ""))
                 return self.attachment_tool.run_python(code)
@@ -356,6 +364,8 @@ class GaiaAgent:
         if not text:
             return text
         text = text.lstrip("$").strip()
+        # Drop a trailing sentence period (but not a decimal point like 89706.00).
+        text = re.sub(r"(?<=[A-Za-z)\]])\.$", "", text).strip()
         if "," in text and "\n" not in text:
             text = ", ".join(part.strip() for part in text.split(",") if part.strip())
         return text

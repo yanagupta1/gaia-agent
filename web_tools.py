@@ -1,4 +1,5 @@
 import html
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -86,19 +87,74 @@ class WebSearchTool:
         self.max_results = max_results or int(os.getenv("WEB_SEARCH_MAX_RESULTS", "3"))
         self.page_char_limit = page_char_limit or int(os.getenv("WEB_PAGE_CHAR_LIMIT", "2500"))
         self.timeout_seconds = timeout_seconds or int(os.getenv("WEB_TIMEOUT_SECONDS", "20"))
+        self.tavily_key = os.getenv("TAVILY_API_KEY", "").strip()
 
     def search(self, query: str) -> list[SearchResult]:
+        if self.tavily_key:
+            results = self._search_tavily(query)
+            if results:
+                return results
+        return self._search_duckduckgo(query)
+
+    def read_page(self, url: str) -> str:
+        if self.tavily_key:
+            content = self._extract_tavily(url)
+            if content:
+                return content[: self.page_char_limit]
+        document = self._fetch_text(url)
+        extractor = TextExtractor()
+        extractor.feed(document)
+        return extractor.text()[: self.page_char_limit]
+
+    def _search_duckduckgo(self, query: str) -> list[SearchResult]:
         url = f"https://duckduckgo.com/html/?q={quote_plus(query)}"
         document = self._fetch_text(url)
         parser = DuckDuckGoHTMLParser()
         parser.feed(document)
         return parser.results[: self.max_results]
 
-    def read_page(self, url: str) -> str:
-        document = self._fetch_text(url)
-        extractor = TextExtractor()
-        extractor.feed(document)
-        return extractor.text()[: self.page_char_limit]
+    def _search_tavily(self, query: str) -> list[SearchResult]:
+        payload = {
+            "api_key": self.tavily_key,
+            "query": query,
+            "max_results": self.max_results,
+            "search_depth": "advanced",
+        }
+        try:
+            data = self._post_json("https://api.tavily.com/search", payload)
+        except Exception:
+            return []
+        results = []
+        for item in data.get("results", []):
+            results.append(
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=item.get("content", ""),
+                )
+            )
+        return results
+
+    def _extract_tavily(self, url: str) -> str:
+        payload = {"api_key": self.tavily_key, "urls": url}
+        try:
+            data = self._post_json("https://api.tavily.com/extract", payload)
+        except Exception:
+            return ""
+        results = data.get("results", [])
+        if not results:
+            return ""
+        return results[0].get("raw_content", "") or ""
+
+    def _post_json(self, url: str, payload: dict) -> dict:
+        request = Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+            method="POST",
+        )
+        with urlopen(request, timeout=self.timeout_seconds) as response:
+            return json.loads(response.read().decode("utf-8"))
 
     def _fetch_text(self, url: str) -> str:
         request = Request(url, headers={"User-Agent": USER_AGENT})

@@ -3,3 +3,4 @@ requests
 pandas
 openpyxl
 pillow
+yt-dlp
