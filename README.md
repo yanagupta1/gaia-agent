@@ -218,6 +218,13 @@ WEB_SEARCH_MAX_RESULTS=5
 python -m unittest discover -s tests -q
 ```
 
+## Certification
+
+Completed the [Hugging Face Agents Course](https://huggingface.co/learn/agents-course/),
+covering agent architectures, tool integration, orchestration, and evaluation.
+
+📜 [View Certificate](docs/hg_certif.png)
+
 ## Notes
 
 Built for the Hugging Face Agents Course final assignment. GAIA benchmark by Mialon
