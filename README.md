@@ -210,7 +210,7 @@ python -m unittest discover -s tests -q
 Completed the [Hugging Face Agents Course](https://huggingface.co/learn/agents-course/),
 covering agent architectures, tool integration, orchestration, and evaluation.
 
-📜 [View Certificate](docs/hg_certif.png)
+![Course certificate](docs/hg_certif.png)
 
 ## Notes
 
