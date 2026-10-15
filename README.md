@@ -1,17 +1,4 @@
----
-title: GAIA Agent (Agents Course Final)
-emoji: 🕵🏻‍♂️
-colorFrom: indigo
-colorTo: indigo
-sdk: gradio
-sdk_version: 5.25.2
-app_file: app.py
-pinned: false
-hf_oauth: true
-hf_oauth_expiration_minutes: 480
----
-
-# GAIA Agent
+# GAIA Agent - Tool-Using AI Agent & Benchmark Evaluation
 
 A tool-using agent I built from scratch for the Hugging Face Agents Course final
 assignment. It answers questions from the GAIA benchmark (the 20-question Level 1
